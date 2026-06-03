@@ -1,9 +1,7 @@
 import torch
 import torch.nn as nn
 
-###############################################
-# Memory-Augmented E3D-LSTM Cell
-###############################################
+
 class MemE3DLSTMCell(nn.Module):
 
     def __init__(self, in_channels, hidden_channels, mem_slots=16, kernel_size=3):
@@ -15,7 +13,7 @@ class MemE3DLSTMCell(nn.Module):
         self.hidden_channels = hidden_channels
         self.mem_slots = mem_slots
 
-        # LSTM gates
+
         self.conv = nn.Conv3d(
             in_channels + hidden_channels,
             hidden_channels * 4,
@@ -23,22 +21,22 @@ class MemE3DLSTMCell(nn.Module):
             padding=padding
         )
 
-        # memory bank
+
         self.memory = nn.Parameter(
             torch.randn(mem_slots, hidden_channels)
         )
 
-        # query projection
+
         self.query_conv = nn.Conv3d(
             hidden_channels,
             hidden_channels,
             1
         )
 
-        # memory projection
+
         self.mem_proj = nn.Linear(hidden_channels, hidden_channels)
 
-        # fusion
+
         self.fusion = nn.Conv3d(
             hidden_channels * 2,
             hidden_channels,
@@ -58,43 +56,37 @@ class MemE3DLSTMCell(nn.Module):
         o = torch.sigmoid(o)
         g = torch.tanh(g)
 
-        # standard LSTM update
+
         c = f * c_prev + i * g
         h = o * torch.tanh(c)
 
-        #################################
-        # Memory Attention
-        #################################
+
 
         B, C, T, H, W = h.shape
 
         query = self.query_conv(h)
 
-        query = query.mean(dim=[2,3,4])   # (B,C)
+        query = query.mean(dim=[2,3,4])   
 
-        mem = self.mem_proj(self.memory)  # (mem_slots,C)
+        mem = self.mem_proj(self.memory)  
 
         attn = torch.softmax(
             torch.matmul(query, mem.t()),
             dim=-1
         )
 
-        mem_read = torch.matmul(attn, mem)  # (B,C)
+        mem_read = torch.matmul(attn, mem)  
 
         mem_read = mem_read.view(B, C, 1, 1, 1).expand(-1,-1,T,H,W)
 
-        #################################
-        # Fusion
-        #################################
+    
 
         fused = torch.cat([h, mem_read], dim=1)
 
         h = self.fusion(fused)
 
         return h, c
-###############################################
-# Memory-Augmented E3D-LSTM Layer
-###############################################
+
 class MemE3DLSTM(nn.Module):
 
     def __init__(self, in_channels, hidden_channels):
@@ -106,7 +98,7 @@ class MemE3DLSTM(nn.Module):
 
     def forward(self, x):
 
-        # x : (B,C,T,H,W)
+
 
         B, C, T, H, W = x.shape
 
