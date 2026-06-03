@@ -2,9 +2,6 @@
 import torch.nn as nn
 from models.aerhcnet import AE_RHCNet
 
-###############################################
-# Decoder Stage
-###############################################
 class DecoderStage(nn.Module):
 
     def __init__(self, in_ch, out_ch):
