@@ -1,9 +1,6 @@
 import torch.nn as nn
 from models.rhcnet import RHCBlock
 
-###############################################
-# Encoder Stage
-###############################################
 class EncoderStage(nn.Module):
 
     def __init__(self, in_ch, out_ch):
