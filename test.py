@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Sun Apr  5 15:29:05 2026
-
-@author: USER
-"""
 
 import os
 import cv2
@@ -18,9 +12,7 @@ from sklearn.metrics import roc_auc_score, roc_curve
 from models.autoencoder_skip import RHCNetAutoencoder
 
 
-# =========================================================
-# CONFIG
-# =========================================================
+
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 SEQ_LEN = 3
@@ -29,19 +21,17 @@ BATCH_SIZE = 1
 
 GRAYSCALE_DATASET = False
 
-TEST_VIDEO_DIR = r"C:\Users\USER\Desktop\Results MGTT\eidetic_vad-main_Avnue\data\Shanghai_val/01_0014"
-CHECKPOINT_PATH = r"C:\Users\USER\Desktop\CIS\meme3d_RHC\checkpoints_ST\last_model.pth"
-RESULTS_DIR = r"results_ST_final 01_0014"
+TEST_VIDEO_DIR = "data/test"
+CHECKPOINT_PATH = "best_model.pth"
+RESULTS_DIR = "results"
 
 USE_GROUND_TRUTH = True
 GROUND_TRUTH_ONE_BASED = True
 ANOMALY_RANGES = [
-    (92, 240)
+    (#Gt1, #Gt2)
 ]
 
-# =========================================================
-# DATASET
-# =========================================================
+
 class VideoSequenceDataset(Dataset):
     def __init__(self, root_dir, seq_len=3, img_size=256, grayscale_dataset=False):
         self.root_dir = root_dir
@@ -64,7 +54,7 @@ class VideoSequenceDataset(Dataset):
 
     def _read_frame(self, path):
         if self.grayscale_dataset:
-            # For real grayscale datasets only
+    
             img = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
             if img is None:
                 raise ValueError(f"Failed to read image: {path}")
@@ -72,20 +62,20 @@ class VideoSequenceDataset(Dataset):
             img = cv2.resize(img, (self.img_size, self.img_size))
             img = img.astype(np.float32) / 255.0
 
-            # Replicate to 3 channels for model compatibility
-            img = np.stack([img, img, img], axis=-1)   # (H, W, 3)
+        
+            img = np.stack([img, img, img], axis=-1)  
         else:
-            # Read true color image
+  
             img = cv2.imread(path, cv2.IMREAD_COLOR)
             if img is None:
                 raise ValueError(f"Failed to read image: {path}")
 
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img = cv2.resize(img, (self.img_size, self.img_size))
-            img = img.astype(np.float32) / 255.0       # (H, W, 3)
+            img = img.astype(np.float32) / 255.0      
 
-        # Convert to CHW for torch
-        img = np.transpose(img, (2, 0, 1))             # (3, H, W)
+
+        img = np.transpose(img, (2, 0, 1))       
         return img
 
     def __len__(self):
@@ -97,10 +87,10 @@ class VideoSequenceDataset(Dataset):
         for i in range(self.seq_len):
             seq.append(self._read_frame(self.frames[idx + i]))
     
-        seq = np.stack(seq, axis=0)  # (T, 3, H, W)
+        seq = np.stack(seq, axis=0) 
     
-        # ✅ FIX: target = last frame (aligned with prediction)
-        target = seq[-1]  # instead of future frame
+
+        target = seq[-1]  
     
         return {
             "sequence": torch.tensor(seq, dtype=torch.float32),
@@ -109,9 +99,7 @@ class VideoSequenceDataset(Dataset):
             "target_index": idx + self.seq_len - 1
         }
 
-# =========================================================
-# METRICS
-# =========================================================
+
 def build_frame_labels(num_frames, anomaly_ranges, one_based=True):
     labels = np.zeros(num_frames, dtype=np.int32)
 
@@ -145,19 +133,14 @@ def compute_auc_eer(scores, labels):
     return auc, eer, eer_threshold
 
 
-# =========================================================
-# VISUALIZATION HELPERS
-# =========================================================
+
 def to_uint8_image(x):
     x = np.clip(x, 0.0, 1.0)
     return (x * 255.0).astype(np.uint8)
 
 
 def make_error_map_rgb(target_rgb, pred_rgb):
-    """
-    Compute pixel-wise error map from TARGET vs PREDICTION.
-    target_rgb, pred_rgb: (H, W, 3) in [0,1]
-    """
+
     abs_err = np.abs(target_rgb - pred_rgb)
     err_map = np.mean(abs_err, axis=2)
 
@@ -167,20 +150,14 @@ def make_error_map_rgb(target_rgb, pred_rgb):
     return err_map
 
 def compute_psnr(pred, target, eps=1e-8):
-    """
-    pred, target: (B, C, H, W) in [0,1]
-    returns: (B,)
-    """
+
     mse = torch.mean((pred - target) ** 2, dim=(1, 2, 3)) + eps
     psnr = 10 * torch.log10(1.0 / mse)
     return psnr
 
 
 def make_heatmap_overlay(base_img_rgb_u8, error_map):
-    """
-    base_img_rgb_u8: (H, W, 3) uint8 RGB
-    error_map: (H, W) float32 in [0,1]
-    """
+
     heat = (error_map * 255.0).astype(np.uint8)
     heatmap_bgr = cv2.applyColorMap(heat, cv2.COLORMAP_JET)
     heatmap_rgb = cv2.cvtColor(heatmap_bgr, cv2.COLOR_BGR2RGB)
@@ -190,33 +167,27 @@ def make_heatmap_overlay(base_img_rgb_u8, error_map):
 
 
 def save_visualization(save_path, last_input_rgb, target_rgb, pred_rgb, err_map):
-    """
-    Updated visualization:
-    - Target ↔ Prediction emphasized
-    - Error computed ONLY from target vs prediction
-    """
+
 
     last_input_u8 = to_uint8_image(last_input_rgb)
     target_u8 = to_uint8_image(target_rgb)
     pred_u8 = to_uint8_image(pred_rgb)
 
-    # Error map (from target vs prediction ONLY)
+
     err_u8 = (err_map * 255.0).astype(np.uint8)
     err_rgb = cv2.cvtColor(err_u8, cv2.COLOR_GRAY2RGB)
 
-    # Heatmap overlay on TARGET (correct reference)
+
     heatmap_rgb, overlay_rgb = make_heatmap_overlay(target_u8, err_map)
 
-    # ----------------------------------------
-    # Corrected visualization order
-    # ----------------------------------------
+
     canvas_items = [
-        cv2.cvtColor(target_u8, cv2.COLOR_RGB2BGR),      # PRIMARY
-        cv2.cvtColor(pred_u8, cv2.COLOR_RGB2BGR),        # PRIMARY
+        cv2.cvtColor(target_u8, cv2.COLOR_RGB2BGR),   
+        cv2.cvtColor(pred_u8, cv2.COLOR_RGB2BGR),        
         cv2.cvtColor(err_rgb, cv2.COLOR_RGB2BGR),
         cv2.cvtColor(heatmap_rgb, cv2.COLOR_RGB2BGR),
         cv2.cvtColor(overlay_rgb, cv2.COLOR_RGB2BGR),
-        cv2.cvtColor(last_input_u8, cv2.COLOR_RGB2BGR)   # reference only
+        cv2.cvtColor(last_input_u8, cv2.COLOR_RGB2BGR) 
     ]
 
     labels = [
@@ -244,9 +215,7 @@ def save_visualization(save_path, last_input_rgb, target_rgb, pred_rgb, err_map)
     cv2.imwrite(save_path, canvas)
 
 
-# =========================================================
-# MAIN
-# =========================================================
+
 def main():
     os.makedirs(RESULTS_DIR, exist_ok=True)
     vis_dir = os.path.join(RESULTS_DIR, "visualizations")
@@ -275,33 +244,33 @@ def main():
 
     with torch.no_grad():
         for i, batch in enumerate(loader):
-            seq = batch["sequence"].to(DEVICE)      # (B, T, 3, H, W)
-            target = batch["target"].to(DEVICE)     # (B, 3, H, W)
+            seq = batch["sequence"].to(DEVICE)      
+            target = batch["target"].to(DEVICE)     
 
-            pred = model(seq)                       # (B, 3, H, W)
+            pred = model(seq)                       
 
-            psnr = compute_psnr(pred, target)   # (B,)
+            psnr = compute_psnr(pred, target)   
             
-            # Convert to anomaly score
-            score = (-psnr).item()   # lower PSNR → higher anomaly
+      
+            score = (-psnr).item()  
             
             all_scores.append(score)
 
-            last_input = seq[:, -1].squeeze(0).cpu().numpy()   # (3, H, W)
-            target_np = target.squeeze(0).cpu().numpy()        # (3, H, W)
-            pred_np = pred.squeeze(0).cpu().numpy()            # (3, H, W)
+            last_input = seq[:, -1].squeeze(0).cpu().numpy()   
+            target_np = target.squeeze(0).cpu().numpy()        
+            pred_np = pred.squeeze(0).cpu().numpy()           
 
-            # CHW -> HWC for visualization
-            last_input = np.transpose(last_input, (1, 2, 0))   # (H, W, 3)
+
+            last_input = np.transpose(last_input, (1, 2, 0))   
             target_np = np.transpose(target_np, (1, 2, 0))
             pred_np = np.transpose(pred_np, (1, 2, 0))
 
-            # clip before visualization / error computation
+     
             last_input = np.clip(last_input, 0.0, 1.0)
             target_np = np.clip(target_np, 0.0, 1.0)
             pred_np = np.clip(pred_np, 0.0, 1.0)
 
-            # RGB-based error map
+  
             err_map = make_error_map_rgb(target_np, pred_np)
 
             save_path = os.path.join(vis_dir, f"{i:04d}.png")
