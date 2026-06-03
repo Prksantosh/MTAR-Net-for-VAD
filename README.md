@@ -1,7 +1,7 @@
 # MTAR-Net-for-VAD
 MTAR-Net: Memory-Guided Temporal Attention Recurrent Learning with Spatial Feature Enhancement for Video Anomaly Detection
 
-This repository is under build and necessary source files are available here.
+This repository is under build and necessary source files are available for review purpose.
 
 # Data availability: All data used in this work are open-source and downloadable.
 The CUHK Avenue dataset is available at https://www.cse.cuhk.edu.hk/leojia/projects/detectabnormal/dataset.html.
