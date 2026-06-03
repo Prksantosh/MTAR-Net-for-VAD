@@ -1,22 +1,9 @@
-# -*- coding: utf-8 -*-
-"""
-Memory-Augmented E3D-LSTM
-UPDATED VERSION:
-- Replaced Conv3D operations with Conv2D
-- Temporal dimension processed independently
-- Much lower memory usage
-- Faster inference
-- Better FPS
-"""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-############################################################
-# LayerNorm over last dimension
-############################################################
+
 class LayerNormLastDim(nn.Module):
 
     def __init__(self, dim):
@@ -30,9 +17,6 @@ class LayerNormLastDim(nn.Module):
         return self.norm(x)
 
 
-############################################################
-# Memory-Guided Temporal Attention
-############################################################
 class MemoryGuidedTemporalAttention(nn.Module):
 
     def __init__(
@@ -58,15 +42,10 @@ class MemoryGuidedTemporalAttention(nn.Module):
         self.scale = self.head_dim ** -0.5
         self.memory_slots = memory_slots
 
-        # --------------------------------------------------
-        # Normalization
-        # --------------------------------------------------
 
         self.norm = LayerNormLastDim(channels)
 
-        # --------------------------------------------------
-        # QKV projections
-        # --------------------------------------------------
+
 
         self.q_proj = nn.Linear(
             channels,
@@ -86,9 +65,7 @@ class MemoryGuidedTemporalAttention(nn.Module):
             bias=False
         )
 
-        # --------------------------------------------------
-        # Learnable Memory Bank
-        # --------------------------------------------------
+
 
         self.memory = nn.Parameter(
             torch.randn(memory_slots, channels)
@@ -106,9 +83,6 @@ class MemoryGuidedTemporalAttention(nn.Module):
             bias=False
         )
 
-        # --------------------------------------------------
-        # Output projection
-        # --------------------------------------------------
 
         self.out_proj = nn.Linear(
             channels,
@@ -118,9 +92,7 @@ class MemoryGuidedTemporalAttention(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-        # --------------------------------------------------
-        # Memory Fusion Gate
-        # --------------------------------------------------
+
 
         self.gate_proj = nn.Linear(
             channels * 2,
@@ -129,17 +101,6 @@ class MemoryGuidedTemporalAttention(nn.Module):
 
     def forward(self, x):
 
-        """
-        x: (B, C, T, H, W)
-        """
-
-        B, C, T, H, W = x.shape
-
-        N = H * W
-
-        # --------------------------------------------------
-        # Convert to temporal tokens
-        # --------------------------------------------------
 
         x_tokens = (
             x.permute(0, 3, 4, 2, 1)
@@ -149,9 +110,7 @@ class MemoryGuidedTemporalAttention(nn.Module):
 
         x_norm = self.norm(x_tokens)
 
-        # --------------------------------------------------
-        # QKV
-        # --------------------------------------------------
+
 
         q = self.q_proj(x_norm)
 
@@ -159,9 +118,7 @@ class MemoryGuidedTemporalAttention(nn.Module):
 
         v = self.v_proj(x_norm)
 
-        # --------------------------------------------------
-        # Memory Tokens
-        # --------------------------------------------------
+
 
         mem = self.memory.unsqueeze(0).expand(
             B * N,
@@ -173,17 +130,12 @@ class MemoryGuidedTemporalAttention(nn.Module):
 
         mem_v = self.mem_v_proj(mem)
 
-        # --------------------------------------------------
-        # Concatenate Memory
-        # --------------------------------------------------
 
         k_all = torch.cat([k, mem_k], dim=1)
 
         v_all = torch.cat([v, mem_v], dim=1)
 
-        # --------------------------------------------------
-        # Multi-head reshape
-        # --------------------------------------------------
+
 
         q = (
             q.view(
@@ -215,9 +167,7 @@ class MemoryGuidedTemporalAttention(nn.Module):
             .transpose(1, 2)
         )
 
-        # --------------------------------------------------
-        # Attention
-        # --------------------------------------------------
+
 
         attn = torch.matmul(
             q,
@@ -236,9 +186,7 @@ class MemoryGuidedTemporalAttention(nn.Module):
                .view(B * N, T, C)
         )
 
-        # --------------------------------------------------
-        # Explicit Memory Read
-        # --------------------------------------------------
+
 
         mem_attn = torch.matmul(
             self.q_proj(x_norm),
@@ -252,9 +200,7 @@ class MemoryGuidedTemporalAttention(nn.Module):
             self.memory
         )
 
-        # --------------------------------------------------
-        # Gated Fusion
-        # --------------------------------------------------
+
 
         fused = torch.cat(
             [out, mem_read],
@@ -270,15 +216,11 @@ class MemoryGuidedTemporalAttention(nn.Module):
             (1.0 - gate) * mem_read
         )
 
-        # --------------------------------------------------
-        # Final Projection
-        # --------------------------------------------------
+
 
         out = self.out_proj(out)
 
-        # --------------------------------------------------
-        # Back to 5D tensor
-        # --------------------------------------------------
+
 
         out = (
             out.view(B, H, W, T, C)
@@ -289,10 +231,7 @@ class MemoryGuidedTemporalAttention(nn.Module):
         return out
 
 
-############################################################
-# Memory-Augmented E3D-LSTM Cell
-# UPDATED: Conv3D -> Conv2D
-############################################################
+
 class MemE3DLSTMCell(nn.Module):
 
     def __init__(
@@ -310,12 +249,6 @@ class MemE3DLSTMCell(nn.Module):
 
         self.hidden_channels = hidden_channels
 
-        # --------------------------------------------------
-        # Conv2D Gates
-        #
-        # Input:
-        # (B*T, C, H, W)
-        # --------------------------------------------------
 
         self.conv = nn.Conv2d(
             in_channels + hidden_channels,
@@ -324,17 +257,13 @@ class MemE3DLSTMCell(nn.Module):
             padding=padding
         )
 
-        # --------------------------------------------------
-        # Learnable Memory Bank
-        # --------------------------------------------------
+
 
         self.memory = nn.Parameter(
             torch.randn(mem_slots, hidden_channels)
         )
 
-        # --------------------------------------------------
-        # Query Projection
-        # --------------------------------------------------
+
 
         self.query_conv = nn.Conv2d(
             hidden_channels,
@@ -342,18 +271,14 @@ class MemE3DLSTMCell(nn.Module):
             kernel_size=1
         )
 
-        # --------------------------------------------------
-        # Memory Projection
-        # --------------------------------------------------
+
 
         self.mem_proj = nn.Linear(
             hidden_channels,
             hidden_channels
         )
 
-        # --------------------------------------------------
-        # Fusion
-        # --------------------------------------------------
+
 
         self.fusion = nn.Conv2d(
             hidden_channels * 2,
@@ -361,9 +286,7 @@ class MemE3DLSTMCell(nn.Module):
             kernel_size=1
         )
 
-        # --------------------------------------------------
-        # Temporal Attention
-        # --------------------------------------------------
+
 
         self.temporal_attention = (
             MemoryGuidedTemporalAttention(
@@ -373,9 +296,7 @@ class MemE3DLSTMCell(nn.Module):
             )
         )
 
-        # --------------------------------------------------
-        # Memory Gate
-        # --------------------------------------------------
+
 
         self.memory_gate = nn.Sequential(
 
@@ -397,9 +318,7 @@ class MemE3DLSTMCell(nn.Module):
 
         B, C, T, H, W = x.shape
 
-        # --------------------------------------------------
-        # Convert to 2D format
-        # --------------------------------------------------
+
 
         x2d = (
             x.permute(0, 2, 1, 3, 4)
@@ -425,9 +344,7 @@ class MemE3DLSTMCell(nn.Module):
                         W)
         )
 
-        # ==================================================
-        # ConvLSTM Update
-        # ==================================================
+
 
         combined = torch.cat(
             [x2d, h2d],
@@ -450,17 +367,13 @@ class MemE3DLSTMCell(nn.Module):
 
         g = torch.tanh(g)
 
-        # --------------------------------------------------
-        # LSTM update
-        # --------------------------------------------------
+
 
         c = f * c2d + i * g
 
         h = o * torch.tanh(c)
 
-        # ==================================================
-        # Memory Attention
-        # ==================================================
+=
 
         query = self.query_conv(h)
 
@@ -493,10 +406,7 @@ class MemE3DLSTMCell(nn.Module):
             .expand(-1, -1, H, W)
         )
 
-        # ==================================================
-        # Fusion
-        # ==================================================
-
+ 
         fused = torch.cat(
             [h, mem_read],
             dim=1
@@ -504,9 +414,7 @@ class MemE3DLSTMCell(nn.Module):
 
         h_mem = self.fusion(fused)
 
-        # --------------------------------------------------
-        # Restore 5D for temporal attention
-        # --------------------------------------------------
+
 
         h_mem_5d = (
             h_mem.view(
@@ -520,15 +428,10 @@ class MemE3DLSTMCell(nn.Module):
             .contiguous()
         )
 
-        # ==================================================
-        # Temporal Attention
-        # ==================================================
+
 
         h_attn = self.temporal_attention(h_mem_5d)
 
-        # --------------------------------------------------
-        # Back to 2D
-        # --------------------------------------------------
 
         h_attn = (
             h_attn.permute(0, 2, 1, 3, 4)
@@ -539,9 +442,7 @@ class MemE3DLSTMCell(nn.Module):
                         W)
         )
 
-        # ==================================================
-        # Gated Fusion
-        # ==================================================
+
 
         gate_input = torch.cat(
             [h_mem, h_attn],
@@ -555,9 +456,7 @@ class MemE3DLSTMCell(nn.Module):
             (1.0 - gate) * h_attn
         )
 
-        # --------------------------------------------------
-        # Restore 5D
-        # --------------------------------------------------
+
 
         h_final = (
             h_final.view(
@@ -586,9 +485,7 @@ class MemE3DLSTMCell(nn.Module):
         return h_final, c
 
 
-############################################################
-# Memory-Augmented E3D-LSTM Layer
-############################################################
+
 class MemE3DLSTM(nn.Module):
 
     def __init__(
@@ -625,9 +522,7 @@ class MemE3DLSTM(nn.Module):
 
         device = x.device
 
-        # --------------------------------------------------
-        # Hidden States
-        # --------------------------------------------------
+
 
         h1 = torch.zeros(
             B,
@@ -651,9 +546,7 @@ class MemE3DLSTM(nn.Module):
 
         c2 = torch.zeros_like(h2)
 
-        # --------------------------------------------------
-        # Layer 1
-        # --------------------------------------------------
+
 
         h1, c1 = self.cell1(
             x,
@@ -661,9 +554,6 @@ class MemE3DLSTM(nn.Module):
             c1
         )
 
-        # --------------------------------------------------
-        # Layer 2
-        # --------------------------------------------------
 
         h2, c2 = self.cell2(
             h1,
