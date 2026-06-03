@@ -3,9 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class ReconstructionMSELoss(nn.Module):
-    """
-    Standard pixel-wise MSE reconstruction loss.
-    """
+
     def __init__(self, reduction="mean"):
         super().__init__()
         self.mse = nn.MSELoss(reduction=reduction)
@@ -15,10 +13,7 @@ class ReconstructionMSELoss(nn.Module):
 
 
 class SSIMLoss(nn.Module):
-    """
-    Structural similarity loss.
-    Assumes pred/target are already in the same normalized range.
-    """
+
     def __init__(self, window_size=3, C1=0.01**2, C2=0.03**2):
         super().__init__()
         self.window_size = window_size
@@ -43,9 +38,7 @@ class SSIMLoss(nn.Module):
 
 
 class TemporalLoss(nn.Module):
-    """
-    Temporal consistency loss using motion difference.
-    """
+
     def __init__(self, reduction="mean"):
         super().__init__()
         self.l1 = nn.L1Loss(reduction=reduction)
@@ -57,10 +50,7 @@ class TemporalLoss(nn.Module):
 
 
 class GradientLoss(nn.Module):
-    """
-    Edge-aware gradient loss to reduce blur.
-    Compares horizontal and vertical image gradients.
-    """
+
     def __init__(self, reduction="mean"):
         super().__init__()
         self.reduction = reduction
@@ -84,15 +74,7 @@ class GradientLoss(nn.Module):
 
 
 class CombinedPredictionLoss(nn.Module):
-    """
-    Combined loss for next-frame prediction.
 
-    Total loss:
-        L = lambda_mse * MSE
-          + lambda_ssim * SSIM
-          + lambda_temp * Temporal
-          + lambda_grad * Gradient
-    """
     def __init__(
         self,
         lambda_mse=0.60,
