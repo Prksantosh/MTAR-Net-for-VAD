@@ -48,7 +48,7 @@ Dataset structure:
                     └── 003.tif/
                     └── 004.tif/
 # Usgae
-    Set training and validation paths
+    Set training and validation paths in train.py
     Run train.py to train the model.
     For evaluation, run test.py to get visualization maps, Area under RoC curve score, equal error rate score and anomaly detection curves.
     (Groundtruth will be requited to evaluate the model)
